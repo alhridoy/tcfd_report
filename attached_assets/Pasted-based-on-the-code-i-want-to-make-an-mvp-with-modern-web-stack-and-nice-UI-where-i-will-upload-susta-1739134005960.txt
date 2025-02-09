@@ -1,0 +1,113 @@
+based on the code i want to make an mvp with modern web stack and nice UI/ where i will upload sustanibility report and best on the coed/model it will generatre TCFD complaince report and show the report in nice UI. # First, run this cell to install required packages
+# !pip install openai llama-index
+
+# Then run this cell to set up your API key
+# Replace 'your-api-key-here' with your actual OpenAI API key
+OPENAI_API_KEY = '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'  
+
+# Main code
+import logging
+import sys
+from typing import List, Union, Dict
+from openai import OpenAI
+from llama_index.core import SimpleDirectoryReader
+from google.colab import files
+import json
+
+class TcfdReportGenerator:
+    def __init__(self, api_key: str):
+        self.client = OpenAI(api_key=api_key)
+        self.setup_logging()
+
+    @staticmethod
+    def setup_logging():
+        logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+        logging.getLogger('sentence_transformers').setLevel(logging.ERROR)
+        logging.getLogger().setLevel(logging.WARNING)
+
+    def get_completion(self, context: str, question: str, max_tokens: int = 1000) -> str:
+        prompt = f"""You are a sustainability reporting expert specializing in TCFD reports. 
+        Based on the provided context, answer the following question professionally and accurately.
+        
+        Context: {context}
+        
+        Question: {question}
+        
+        Please provide a detailed, well-structured response."""
+
+        try:
+            response = self.client.chat.completions.create(
+                model="gpt-4-turbo-preview",
+                messages=[
+                    {"role": "system", "content": "You are a sustainability reporting expert specializing in TCFD reports."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=max_tokens,
+                temperature=0.1,
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            logging.error(f"Error getting completion: {str(e)}")
+            return ""
+
+    def generate_report(self, document_content: str) -> Dict:
+        tcfd_sections = {
+            "Governance": {
+                "Q1": "How does the company's board oversee climate-related risks and opportunities?",
+                "Q2": "What is the role of management in assessing and managing climate-related risks and opportunities?"
+            },
+            "Strategy": {
+                "Q1": "What are the most relevant climate-related risks and opportunities identified over the short, medium, and long term?",
+                "Q2": "How do climate-related risks and opportunities impact the organisation's businesses strategy and financial planning?",
+                "Q3": "How resilient is the organisation's strategy considering different climate-related scenarios?"
+            },
+            "Risk_Management": {
+                "Q1": "What processes are used to identify and assess climate-related risks?",
+                "Q2": "How does the organisation manage climate-related risks?",
+                "Q3": "How are climate-related risks integrated into overall risk management?"
+            },
+            "Metrics_and_Targets": {
+                "Q1": "What metrics are used to assess climate-related risks and opportunities?",
+                "Q2": "What are the Scope 1, 2, and 3 greenhouse gas emissions?",
+                "Q3": "What targets are used to manage climate-related risks and opportunities?"
+            }
+        }
+
+        report = {}
+        for section, questions in tcfd_sections.items():
+            print(f"Generating {section} section...")
+            section_responses = {}
+            for q_id, question in questions.items():
+                response = self.get_completion(document_content, question)
+                section_responses[q_id] = response
+            report[section] = section_responses
+
+        return report
+
+def process_pdf():
+    # Upload file
+    print("Please upload your annual report PDF")
+    uploaded = files.upload()
+    
+    # Get the filename
+    filename = list(uploaded.keys())[0]
+    
+    # Load document
+    documents = SimpleDirectoryReader(input_files=[filename]).load_data()
+    document_content = "\n\n".join([doc.text for doc in documents])
+    
+    # Generate report
+    generator = TcfdReportGenerator(api_key=OPENAI_API_KEY)
+    report = generator.generate_report(document_content)
+    
+    # Save report
+    with open('tcfd_report.json', 'w') as f:
+        json.dump(report, f, indent=4)
+    
+    # Download report
+    files.download('tcfd_report.json')
+    
+    return report
+
+# Run this cell to process your PDF and generate the report
+report = process_pdf()
